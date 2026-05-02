@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
@@ -14,7 +14,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { mockRuns } from "@/lib/mock-data";
+import { listRuns, type RunListItem } from "@/lib/api";
 import {
   PlayIcon,
   ChevronDownIcon,
@@ -36,8 +36,9 @@ const TIME_RANGES = [
 
 const DEFAULT_CAPS: Record<string, number> = { "1m": 20, "3m": 40, "6m": 70, "1y": 100 };
 
-function SentimentBadge({ sentiment }: { sentiment: { positive: number; neutral: number; negative: number } }) {
+function SentimentBadge({ sentiment }: { sentiment: NonNullable<RunListItem["sentiment"]> }) {
   const total = sentiment.positive + sentiment.neutral + sentiment.negative;
+  if (total === 0) return null;
   const dominant =
     sentiment.positive >= sentiment.negative
       ? sentiment.positive >= sentiment.neutral
@@ -89,24 +90,53 @@ export default function DashboardPage() {
   const [excludeDomains, setExcludeDomains] = useState("");
   const [confidenceThreshold, setConfidenceThreshold] = useState(0.55);
 
-  const hasRunning = mockRuns.some((r) => r.status === "running");
-  const recentRuns = mockRuns
-    .filter((r) => r.status === "complete")
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    .slice(0, 5);
+  const [runs, setRuns] = useState<RunListItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    listRuns()
+      .then((data) => {
+        if (!cancelled) setRuns(data);
+      })
+      .catch((err) => {
+        if (!cancelled) setLoadError(err.message ?? "Failed to load runs");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const runningRun = runs.find((r) => r.status === "running");
+  const recentRuns = runs.filter((r) => r.status === "complete").slice(0, 5);
   const capWarning = typeof articleCap === "number" && articleCap > 150;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!brand.trim() || hasRunning) return;
-    router.push(`/analyze?brand=${encodeURIComponent(brand.trim())}&range=${timeRange}`);
+    if (!brand.trim() || runningRun) return;
+    const params = new URLSearchParams({
+      brand: brand.trim(),
+      range: timeRange,
+    });
+    if (typeof articleCap === "number" && articleCap !== DEFAULT_CAPS[timeRange]) {
+      params.set("article_cap", String(articleCap));
+    }
+    if (confidenceThreshold !== 0.55) {
+      params.set("confidence_threshold", String(confidenceThreshold));
+    }
+    if (includeDomains.trim()) params.set("include_domains", includeDomains.trim());
+    if (excludeDomains.trim()) params.set("exclude_domains", excludeDomains.trim());
+    router.push(`/analyze?${params.toString()}`);
   };
 
   return (
     <AppShell>
       <div className="space-y-6">
-        {/* ── Analysis form ─────────────────────────────────── */}
         <div>
           <Card>
             <CardHeader>
@@ -117,7 +147,6 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-5">
-                {/* Brand name */}
                 <div className="space-y-1.5">
                   <Label htmlFor="brand-name">Brand Name</Label>
                   <Input
@@ -127,11 +156,10 @@ export default function DashboardPage() {
                     onChange={(e) => setBrand(e.target.value)}
                     autoFocus
                     required
-                    disabled={hasRunning}
+                    disabled={!!runningRun}
                   />
                 </div>
 
-                {/* Time range */}
                 <div className="space-y-1.5">
                   <Label>Time Range</Label>
                   <div className="flex gap-2">
@@ -139,7 +167,7 @@ export default function DashboardPage() {
                       <button
                         key={value}
                         type="button"
-                        disabled={hasRunning}
+                        disabled={!!runningRun}
                         onClick={() => {
                           setTimeRange(value);
                           setArticleCap(DEFAULT_CAPS[value]);
@@ -156,7 +184,6 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
-                {/* Advanced config */}
                 <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
                   <CollapsibleTrigger
                     className="flex w-full items-center justify-between rounded-lg border border-border/60 px-4 py-2.5 text-sm text-muted-foreground hover:bg-muted/30 cursor-pointer"
@@ -168,7 +195,6 @@ export default function DashboardPage() {
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <div className="mt-3 space-y-4 rounded-lg border border-border/40 bg-muted/20 p-4">
-                      {/* Article cap */}
                       <div className="space-y-1.5">
                         <Label htmlFor="article-cap">
                           Max Articles{" "}
@@ -184,7 +210,7 @@ export default function DashboardPage() {
                           onChange={(e) =>
                             setArticleCap(e.target.value === "" ? "" : Number(e.target.value))
                           }
-                          disabled={hasRunning}
+                          disabled={!!runningRun}
                         />
                         {capWarning && (
                           <p className="flex items-center gap-1.5 text-xs text-amber-600">
@@ -194,7 +220,6 @@ export default function DashboardPage() {
                         )}
                       </div>
 
-                      {/* Include domains */}
                       <div className="space-y-1.5">
                         <Label htmlFor="include-domains">Include Domains</Label>
                         <Input
@@ -202,11 +227,10 @@ export default function DashboardPage() {
                           placeholder="espn.com, reuters.com (comma-separated)"
                           value={includeDomains}
                           onChange={(e) => setIncludeDomains(e.target.value)}
-                          disabled={hasRunning}
+                          disabled={!!runningRun}
                         />
                       </div>
 
-                      {/* Exclude domains */}
                       <div className="space-y-1.5">
                         <Label htmlFor="exclude-domains">Exclude Domains</Label>
                         <Input
@@ -214,11 +238,10 @@ export default function DashboardPage() {
                           placeholder="tabloid.com (comma-separated)"
                           value={excludeDomains}
                           onChange={(e) => setExcludeDomains(e.target.value)}
-                          disabled={hasRunning}
+                          disabled={!!runningRun}
                         />
                       </div>
 
-                      {/* Confidence threshold */}
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <Label>Confidence Threshold</Label>
@@ -233,7 +256,7 @@ export default function DashboardPage() {
                           step={0.01}
                           value={confidenceThreshold}
                           onChange={(e) => setConfidenceThreshold(Number(e.target.value))}
-                          disabled={hasRunning}
+                          disabled={!!runningRun}
                           className="w-full accent-primary"
                         />
                         <div className="flex justify-between text-xs text-muted-foreground">
@@ -245,9 +268,8 @@ export default function DashboardPage() {
                   </CollapsibleContent>
                 </Collapsible>
 
-                {/* Run button */}
                 <div className="pt-1">
-                  {hasRunning ? (
+                  {runningRun ? (
                     <Button type="button" className="w-full" disabled>
                       <LoaderIcon className="size-4 animate-spin" />
                       An analysis is already in progress
@@ -268,7 +290,6 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* ── Recent runs ───────────────────────────────────── */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
@@ -279,8 +300,14 @@ export default function DashboardPage() {
             </Link>
           </div>
 
-          {/* Running indicator */}
-          {hasRunning && (
+          {loading && (
+            <p className="text-sm text-muted-foreground">Loading runs…</p>
+          )}
+          {loadError && (
+            <p className="text-sm text-red-600">Could not load runs: {loadError}</p>
+          )}
+
+          {runningRun && (
             <Card className="border-blue-500/30 bg-blue-500/5">
               <CardContent className="p-4 space-y-1">
                 <div className="flex items-center gap-2 text-sm font-medium text-blue-600">
@@ -288,9 +315,12 @@ export default function DashboardPage() {
                   Analysis in progress
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  OpenAI · 3 Months
+                  {runningRun.brand_name} · {labelForRange(runningRun.time_range)}
                 </p>
-                <Link href="/analyze" className="text-xs text-primary hover:underline">
+                <Link
+                  href={`/analyze?brand=${encodeURIComponent(runningRun.brand_name)}&range=${runningRun.time_range}&run_id=${runningRun.id}`}
+                  className="text-xs text-primary hover:underline"
+                >
                   View progress →
                 </Link>
               </CardContent>
@@ -304,13 +334,7 @@ export default function DashboardPage() {
                   <div>
                     <div className="font-medium text-sm">{run.brand_name}</div>
                     <div className="text-xs text-muted-foreground capitalize">
-                      {run.time_range === "1m"
-                        ? "1 Month"
-                        : run.time_range === "3m"
-                          ? "3 Months"
-                          : run.time_range === "6m"
-                            ? "6 Months"
-                            : "1 Year"}
+                      {labelForRange(run.time_range)}
                     </div>
                   </div>
                   <StatusBadge status={run.status} />
@@ -339,8 +363,18 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
           ))}
+
+          {!loading && !loadError && runs.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              No runs yet. Submit one above to get started.
+            </p>
+          )}
         </div>
       </div>
     </AppShell>
   );
+}
+
+function labelForRange(range: string) {
+  return range === "1m" ? "1 Month" : range === "3m" ? "3 Months" : range === "6m" ? "6 Months" : "1 Year";
 }

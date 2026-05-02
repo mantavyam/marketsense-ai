@@ -1,29 +1,40 @@
 # MarketSense-AI
 - MarketSense is a full-stack AI-powered web application that enables users to perform deep sentiment analysis on news coverage for any brand. The user enters a brand name and a time range, and the system autonomously discovers the best available free news source, extracts relevant headlines, processes them through a pre-trained transformer sentiment model (FinBERT), generates a structured visual report backed by 11 chart types, and optionally delivers the report via email. A floating chatbot panel allows real-time conversational interaction grounded strictly in the generated sentiment report.
 
-## Table of Contents (PRD.md)
+Backend complete + frontend coupled + smoke-tested end-to-end. Summary:
 
-1. [Product Overview](#1-product-overview)
-2. [Goals and Success Metrics](#2-goals-and-success-metrics)
-3. [Tech Stack](#3-tech-stack)
-4. [Infrastructure Decision and Rationale](#4-infrastructure-decision-and-rationale)
-5. [System Architecture](#5-system-architecture)
-6. [Authentication and User Management](#6-authentication-and-user-management)
-7. [Phase 1 — User Input and Configuration](#7-phase-1--user-input-and-configuration)
-8. [Phase 2 — News Source Identification and Data Extraction](#8-phase-2--news-source-identification-and-data-extraction)
-9. [Phase 3 — Data Processing and Preparation](#9-phase-3--data-processing-and-preparation)
-10. [Phase 4 — Sentiment Analysis Execution](#10-phase-4--sentiment-analysis-execution)
-11. [Phase 5 — Report Generation](#11-phase-5--report-generation)
-12. [Phase 6 — Report Delivery](#12-phase-6--report-delivery)
-13. [Phase 7 — Interactive Chatbot](#13-phase-7--interactive-chatbot)
-14. [Frontend — Pages and UI Specification](#14-frontend--pages-and-ui-specification)
-15. [Visualisation Layer — Chart Mapping](#15-visualisation-layer--chart-mapping)
-16. [Real-Time Processing Feedback UI](#16-real-time-processing-feedback-ui)
-17. [PDF Report Customisation](#17-pdf-report-customisation)
-18. [Database Schema](#18-database-schema)
-19. [API Specification](#19-api-specification)
-20. [Environment Variables](#20-environment-variables)
-21. [Error States and Edge Cases](#21-error-states-and-edge-cases)
-22. [Rate Limiting and Concurrency](#22-rate-limiting-and-concurrency)
-23. [Future Scope](#23-future-scope)
-24. [Out of Scope for v1.0](#24-out-of-scope-for-v10)
+  What shipped
+
+  Backend (/backend):
+  - FastAPI + SQLite (SQLAlchemy async). No auth — anonymous endpoints.
+  - News: Google News RSS via feedparser (default, no key); GNews + NewsAPI used as fallbacks when GNEWS_API_KEY / NEWSAPI_KEY set. newspaper4k skipped — headlines come straight from
+  RSS/API per PRD §8.3.
+  - Sentiment: FinBERT (ProsusAI/finbert) loaded once at startup via lifespan, scored per-headline.
+  - Aggregates: 11 chart payloads computed + summary metrics (momentum via slope, radar dimensions, sankey, ring, funnel, choropleth with TLD lookup).
+  - Report: OpenRouter free-model selection with mistralai/mistral-7b-instruct:free fallback; deterministic template fallback when OPENROUTER_API_KEY absent.
+  - PDF: WeasyPrint + Jinja2 template. Accepts client-captured chart SVGs; substitutes plain-text fallback per missing chart.
+  - Endpoints: GET /analyze (SSE), GET /runs, GET /runs/{id}, DELETE /runs/{id}, GET /reports/{id}, POST /pdf/{id}, GET /health.
+
+  Frontend coupling:
+  - New lib/api.ts (typed client) + lib/use-sse.ts hook.
+  - Dashboard, history, analyze, report wired to real backend.
+  - lib/mock-data.ts deleted; landing page sample-link redirected to /dashboard.
+  - Auth deferred — login still mock-redirects per existing flow.
+
+  Verified:
+  - End-to-end run on Tesla/Apple → SSE progressing through all stages → report persisted → report endpoint returns correct shape → PDF endpoint returns valid 53KB PDF → frontend pages
+  render 200.
+  - TypeScript clean.
+
+  Run instructions
+
+  # Backend
+  cd backend
+  source .venv/bin/activate   # already created
+  uvicorn app.main:app --reload --port 8000
+
+  # Frontend (separate terminal, repo root)
+  cp .env.local.example .env.local
+  pnpm dev
+
+  Optional: set OPENROUTER_API_KEY in backend/.env for AI-generated reports (template fallback works without it).

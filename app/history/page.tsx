@@ -1,18 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { AppShell } from "@/components/app-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { mockRuns, type MockRun } from "@/lib/mock-data";
+import { deleteRun, listRuns, type RunListItem } from "@/lib/api";
 import {
   SearchIcon,
-  TrendingUpIcon,
-  TrendingDownIcon,
-  MinusIcon,
   ExternalLinkIcon,
   RefreshCwIcon,
   Trash2Icon,
@@ -37,9 +34,10 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function SentimentBar({ sentiment }: { sentiment: MockRun["sentiment"] }) {
+function SentimentBar({ sentiment }: { sentiment: RunListItem["sentiment"] }) {
   if (!sentiment) return <span className="text-xs text-muted-foreground">—</span>;
   const total = sentiment.positive + sentiment.neutral + sentiment.negative;
+  if (total === 0) return <span className="text-xs text-muted-foreground">—</span>;
   const pos = (sentiment.positive / total) * 100;
   const neu = (sentiment.neutral / total) * 100;
   const neg = (sentiment.negative / total) * 100;
@@ -57,10 +55,21 @@ function SentimentBar({ sentiment }: { sentiment: MockRun["sentiment"] }) {
   );
 }
 
-function RunRow({ run, expanded, onToggle }: { run: MockRun; expanded: boolean; onToggle: () => void }) {
-  const rangeLabel =
-    run.time_range === "1m" ? "1 Month" : run.time_range === "3m" ? "3 Months" : run.time_range === "6m" ? "6 Months" : "1 Year";
+function rangeLabel(r: string) {
+  return r === "1m" ? "1 Month" : r === "3m" ? "3 Months" : r === "6m" ? "6 Months" : "1 Year";
+}
 
+function RunRow({
+  run,
+  expanded,
+  onToggle,
+  onDelete,
+}: {
+  run: RunListItem;
+  expanded: boolean;
+  onToggle: () => void;
+  onDelete: () => void;
+}) {
   return (
     <>
       <motion.button
@@ -74,7 +83,7 @@ function RunRow({ run, expanded, onToggle }: { run: MockRun; expanded: boolean; 
 
           <div className="min-w-[120px]">
             <div className="font-medium text-sm">{run.brand_name}</div>
-            <div className="text-xs text-muted-foreground">{rangeLabel}</div>
+            <div className="text-xs text-muted-foreground">{rangeLabel(run.time_range)}</div>
           </div>
 
           <div className="hidden sm:block min-w-[110px]">
@@ -157,7 +166,15 @@ function RunRow({ run, expanded, onToggle }: { run: MockRun; expanded: boolean; 
                     </Link>
                   </Button>
                 )}
-                <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-destructive hover:text-destructive"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete();
+                  }}
+                >
                   <Trash2Icon className="size-3.5" />
                   Delete
                 </Button>
@@ -173,13 +190,44 @@ function RunRow({ run, expanded, onToggle }: { run: MockRun; expanded: boolean; 
 export default function HistoryPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [runs, setRuns] = useState<RunListItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    listRuns()
+      .then((data) => {
+        if (!cancelled) setRuns(data);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message ?? "Failed to load runs");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete this run? This cannot be undone.")) return;
+    try {
+      await deleteRun(id);
+      setRuns((prev) => prev.filter((r) => r.id !== id));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Delete failed");
+    }
+  };
 
   const filtered = useMemo(
     () =>
-      mockRuns.filter((r) =>
+      runs.filter((r) =>
         r.brand_name.toLowerCase().includes(searchQuery.toLowerCase())
       ),
-    [searchQuery]
+    [searchQuery, runs]
   );
 
   return (
@@ -187,11 +235,10 @@ export default function HistoryPage() {
       <div className="mb-6">
         <h1 className="text-xl font-semibold">Analysis History</h1>
         <p className="text-sm text-muted-foreground">
-          {filtered.length} of {mockRuns.length} runs
+          {filtered.length} of {runs.length} runs
         </p>
       </div>
 
-      {/* Search bar */}
       <div className="mb-4 flex gap-2">
         <div className="relative flex-1">
           <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -207,51 +254,58 @@ export default function HistoryPage() {
         </Button>
       </div>
 
-      {/* Table */}
-      <div className="rounded-xl border border-border overflow-hidden">
-        {/* Header */}
-        <div className="hidden sm:grid border-b border-border bg-muted/30 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-          style={{ gridTemplateColumns: "1.5rem 1fr 8rem 7rem 7rem 8rem" }}>
-          <span />
-          <span>Brand</span>
-          <span>Sentiment</span>
-          <span>Articles</span>
-          <span>Date</span>
-          <span className="text-right pr-6">Status</span>
-        </div>
+      {loading && (
+        <p className="text-sm text-muted-foreground">Loading runs…</p>
+      )}
+      {error && (
+        <p className="text-sm text-red-600">Could not load runs: {error}</p>
+      )}
 
-        {/* Rows */}
-        <div className="divide-y divide-border">
-          <AnimatePresence mode="popLayout">
-            {filtered.length > 0 ? (
-              filtered.map((run, idx) => (
+      {!loading && !error && (
+        <div className="rounded-xl border border-border overflow-hidden">
+          <div className="hidden sm:grid border-b border-border bg-muted/30 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+            style={{ gridTemplateColumns: "1.5rem 1fr 8rem 7rem 7rem 8rem" }}>
+            <span />
+            <span>Brand</span>
+            <span>Sentiment</span>
+            <span>Articles</span>
+            <span>Date</span>
+            <span className="text-right pr-6">Status</span>
+          </div>
+
+          <div className="divide-y divide-border">
+            <AnimatePresence mode="popLayout">
+              {filtered.length > 0 ? (
+                filtered.map((run, idx) => (
+                  <motion.div
+                    key={run.id}
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.18, delay: idx * 0.03 }}
+                  >
+                    <RunRow
+                      run={run}
+                      expanded={expandedId === run.id}
+                      onToggle={() => setExpandedId((c) => (c === run.id ? null : run.id))}
+                      onDelete={() => handleDelete(run.id)}
+                    />
+                  </motion.div>
+                ))
+              ) : (
                 <motion.div
-                  key={run.id}
-                  initial={{ opacity: 0, y: -8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  transition={{ duration: 0.18, delay: idx * 0.03 }}
+                  key="empty"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="p-12 text-center text-sm text-muted-foreground"
                 >
-                  <RunRow
-                    run={run}
-                    expanded={expandedId === run.id}
-                    onToggle={() => setExpandedId((c) => (c === run.id ? null : run.id))}
-                  />
+                  {runs.length === 0 ? "No runs yet." : "No runs match your search."}
                 </motion.div>
-              ))
-            ) : (
-              <motion.div
-                key="empty"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="p-12 text-center text-sm text-muted-foreground"
-              >
-                No runs match your search.
-              </motion.div>
-            )}
-          </AnimatePresence>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
-      </div>
+      )}
     </AppShell>
   );
 }

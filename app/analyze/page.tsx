@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -17,7 +17,8 @@ import { LiveYAxis } from "@/components/charts/live-y-axis";
 import { Grid } from "@/components/charts/grid";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/logo";
-import { mockProcessingStages, mockLivePoints } from "@/lib/mock-data";
+import { buildAnalyzeUrl, type SSEEvent } from "@/lib/api";
+import { useSSE } from "@/lib/use-sse";
 import {
   CheckCircle2Icon,
   XCircleIcon,
@@ -43,6 +44,26 @@ const STAGE_ICONS = {
   run_complete: RocketIcon,
 };
 
+const STAGE_LABELS: Record<string, string> = {
+  news_discovery: "Identifying best news source",
+  url_collection: "Collecting article URLs",
+  extraction: "Extracting headlines",
+  processing: "Processing and formatting data",
+  sentiment: "Running sentiment analysis",
+  report_generation: "Generating professional report",
+  run_complete: "Analysis complete",
+};
+
+const STAGE_ORDER = [
+  "news_discovery",
+  "url_collection",
+  "extraction",
+  "processing",
+  "sentiment",
+  "report_generation",
+  "run_complete",
+];
+
 type StageStatus = "pending" | "active" | "complete" | "error";
 
 interface StageState {
@@ -62,158 +83,153 @@ export default function AnalyzePage() {
   );
 }
 
+function initialStages(): StageState[] {
+  return STAGE_ORDER.map((s) => ({
+    stage: s,
+    label: STAGE_LABELS[s] ?? s,
+    status: "pending",
+  }));
+}
+
 function AnalyzePageInner() {
   const router = useRouter();
   const params = useSearchParams();
-  const brand = params.get("brand") ?? "Nike";
+  const brand = params.get("brand") ?? "";
   const range = params.get("range") ?? "3m";
+  const articleCap = params.get("article_cap");
+  const confidenceThreshold = params.get("confidence_threshold");
+  const includeDomains = params.get("include_domains");
+  const excludeDomains = params.get("exclude_domains");
 
-  const [stages, setStages] = useState<StageState[]>(
-    mockProcessingStages.map((s) => ({
-      stage: s.stage,
-      label: s.label,
-      status: "pending" as StageStatus,
-    }))
-  );
-  const [currentStageIdx, setCurrentStageIdx] = useState(-1);
-  const [isComplete, setIsComplete] = useState(false);
+  const sseUrl = useMemo(() => {
+    if (!brand) return null;
+    return buildAnalyzeUrl({
+      brand,
+      range: range as "1m" | "3m" | "6m" | "1y",
+      article_cap: articleCap ? Number(articleCap) : undefined,
+      confidence_threshold: confidenceThreshold ? Number(confidenceThreshold) : undefined,
+      include_domains: includeDomains || undefined,
+      exclude_domains: excludeDomains || undefined,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brand, range, articleCap, confidenceThreshold, includeDomains, excludeDomains]);
+
+  const { events, error } = useSSE(sseUrl);
+
+  const [stages, setStages] = useState<StageState[]>(initialStages());
   const [livePoints, setLivePoints] = useState<LiveLinePoint[]>([]);
   const [liveValue, setLiveValue] = useState(0.5);
   const [showUnlock, setShowUnlock] = useState(false);
   const [chainOpen, setChainOpen] = useState(true);
+  const [navigated, setNavigated] = useState(false);
 
-  const livePointsRef = useRef<LiveLinePoint[]>([]);
-  const mockPointsRef = useRef([...mockLivePoints]);
+  const startTimeRef = useRef<number | null>(null);
+  const lastEventRef = useRef<number>(-1);
 
-  // Simulate SSE pipeline
+  // Reset on URL change
   useEffect(() => {
-    let cancelled = false;
-    const startTime = Date.now();
+    setStages(initialStages());
+    setLivePoints([]);
+    setLiveValue(0.5);
+    setShowUnlock(false);
+    setNavigated(false);
+    startTimeRef.current = null;
+    lastEventRef.current = -1;
+  }, [sseUrl]);
 
-    const runStage = async (idx: number) => {
-      if (cancelled || idx >= mockProcessingStages.length) return;
+  // Apply incoming events
+  useEffect(() => {
+    if (events.length <= lastEventRef.current + 1) return;
+    if (startTimeRef.current === null && events.length > 0) {
+      startTimeRef.current = Date.now();
+    }
 
-      const stageDef = mockProcessingStages[idx]!;
+    for (let i = lastEventRef.current + 1; i < events.length; i++) {
+      const evt = events[i] as SSEEvent;
+      applyEvent(evt);
+    }
+    lastEventRef.current = events.length - 1;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [events]);
 
-      // Mark active
-      setStages((prev) =>
-        prev.map((s, i) =>
-          i === idx ? { ...s, status: "active" } : s
-        )
-      );
-      setCurrentStageIdx(idx);
+  function applyEvent(evt: SSEEvent) {
+    if ("status" in evt && evt.status === "error") {
+      setStages((prev) => {
+        const idx = prev.findIndex((s) => s.stage === (evt as { stage: string }).stage);
+        if (idx === -1) return prev;
+        return prev.map((s, i) =>
+          i === idx ? { ...s, status: "error" as StageStatus, message: evt.message } : s
+        );
+      });
+      return;
+    }
 
-      // Simulate sentiment progress with live chart updates
-      if (stageDef.stage === "sentiment" && stageDef.total) {
-        const total = stageDef.total;
-        const interval = stageDef.duration / total;
-
-        for (let i = 0; i < Math.min(total, mockLivePoints.length); i++) {
-          await delay(interval);
-          if (cancelled) return;
-
-          const pt = mockLivePoints[i]!;
-          const now = (Date.now() - startTime) / 1000;
-          const newPt: LiveLinePoint = { time: now, value: pt.score };
-          livePointsRef.current = [...livePointsRef.current, newPt];
-          setLivePoints([...livePointsRef.current]);
-          setLiveValue(pt.score);
-
-          setStages((prev) =>
-            prev.map((s, idx2) =>
-              idx2 === idx
-                ? { ...s, message: `${i + 1} / ${total} articles scored`, current: i + 1, total }
-                : s
-            )
-          );
+    if (evt.stage === "run_complete") {
+      setStages((prev) => prev.map((s) => (s.stage === "run_complete" ? { ...s, status: "complete" } : s)));
+      const runId = (evt as { run_id: string }).run_id;
+      setShowUnlock(true);
+      window.setTimeout(() => {
+        if (!navigated) {
+          setNavigated(true);
+          router.push(`/report/${runId}`);
         }
-      } else if (stageDef.stage === "extraction" && stageDef.total) {
-        const total = stageDef.total;
-        const steps = 5;
-        const interval = stageDef.duration / steps;
-        for (let i = 1; i <= steps; i++) {
-          await delay(interval);
-          if (cancelled) return;
-          setStages((prev) =>
-            prev.map((s, idx2) =>
-              idx2 === idx
-                ? { ...s, message: `${Math.round((i / steps) * total)} / ${total} extracted`, current: Math.round((i / steps) * total), total }
-                : s
-            )
-          );
-        }
-      } else {
-        await delay(stageDef.duration);
-      }
+      }, 2200);
+      return;
+    }
 
-      if (cancelled) return;
-
-      // Mark complete
-      setStages((prev) =>
-        prev.map((s, i) =>
-          i === idx
-            ? { ...s, status: "complete", message: stageDef.message }
-            : s
-        )
-      );
-
-      // Proceed to next stage
-      if (idx + 1 < mockProcessingStages.length) {
-        await delay(300);
-        runStage(idx + 1);
-      } else {
-        // All done
-        await delay(600);
-        if (!cancelled) {
-          setShowUnlock(true);
-          await delay(3200);
-          if (!cancelled) {
-            setIsComplete(true);
-            await delay(800);
-            if (!cancelled) {
-              router.push("/report/run-001");
-            }
-          }
+    setStages((prev) => {
+      const idx = prev.findIndex((s) => s.stage === evt.stage);
+      if (idx === -1) return prev;
+      const status: StageStatus = evt.status === "complete" ? "complete" : "active";
+      const next = [...prev];
+      const previous = next[idx]!;
+      const current = (evt as { current?: number }).current;
+      const total = (evt as { total?: number }).total;
+      next[idx] = {
+        ...previous,
+        status,
+        message:
+          (evt as { message?: string }).message ??
+          (current && total ? `${current} / ${total}` : previous.message),
+        current,
+        total,
+      };
+      // Mark earlier stages complete if this one is active/complete
+      for (let i = 0; i < idx; i++) {
+        if (next[i]!.status === "pending" || next[i]!.status === "active") {
+          next[i] = { ...next[i]!, status: "complete" };
         }
       }
-    };
-
-    // Kick off after short delay
-    delay(500).then(() => {
-      if (!cancelled) runStage(0);
+      return next;
     });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [router]);
+    if (evt.stage === "sentiment" && evt.status === "progress" && "latest" in evt && evt.latest) {
+      const now = startTimeRef.current ? (Date.now() - startTimeRef.current) / 1000 : 0;
+      const point: LiveLinePoint = { time: now, value: evt.latest.confidence };
+      setLivePoints((prev) => [...prev, point]);
+      setLiveValue(evt.latest.confidence);
+    }
+  }
 
   const rangeLabel =
     range === "1m" ? "1 Month" : range === "3m" ? "3 Months" : range === "6m" ? "6 Months" : "1 Year";
 
   return (
     <div className="relative flex min-h-screen flex-col bg-background">
-      {/* Minimal nav */}
       <header className="flex items-center justify-between border-b px-6 py-4">
         <Logo className="h-5" />
         <div className="text-sm text-muted-foreground">
-          Analysing{" "}
-          <span className="font-semibold text-foreground">{brand}</span>
+          Analysing <span className="font-semibold text-foreground">{brand || "—"}</span>
           {" · "}
           <span>{rangeLabel}</span>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => router.push("/dashboard")}
-        >
+        <Button variant="ghost" size="sm" onClick={() => router.push("/dashboard")}>
           Cancel
         </Button>
       </header>
 
       <div className="flex flex-1 flex-col items-center px-6 py-12">
         <div className="w-full max-w-2xl space-y-8">
-          {/* AI Unlock animation — shown on completion */}
           <AnimatePresence>
             {showUnlock && (
               <motion.div
@@ -226,7 +242,6 @@ function AnalyzePageInner() {
             )}
           </AnimatePresence>
 
-          {/* Chain of thought — hidden once unlock shows */}
           <AnimatePresence>
             {!showUnlock && (
               <motion.div
@@ -236,17 +251,11 @@ function AnalyzePageInner() {
                 transition={{ duration: 0.4 }}
                 className="rounded-2xl border border-border/60 bg-card p-6"
               >
-                <ChainOfThought
-                  open={chainOpen}
-                  onOpenChange={setChainOpen}
-                >
-                  <ChainOfThoughtHeader>
-                    Analysis Pipeline
-                  </ChainOfThoughtHeader>
+                <ChainOfThought open={chainOpen} onOpenChange={setChainOpen}>
+                  <ChainOfThoughtHeader>Analysis Pipeline</ChainOfThoughtHeader>
                   <ChainOfThoughtContent>
                     {stages.map((s) => {
-                      const Icon =
-                        STAGE_ICONS[s.stage as keyof typeof STAGE_ICONS] ?? CircleDotIcon;
+                      const Icon = STAGE_ICONS[s.stage as keyof typeof STAGE_ICONS] ?? CircleDotIcon;
 
                       const statusIcon =
                         s.status === "complete" ? (
@@ -292,7 +301,6 @@ function AnalyzePageInner() {
             )}
           </AnimatePresence>
 
-          {/* Live sentiment chart */}
           <AnimatePresence>
             {livePoints.length > 0 && (
               <motion.div
@@ -317,25 +325,35 @@ function AnalyzePageInner() {
                   value={liveValue}
                   dataKey="value"
                   window={60}
-                  paused={isComplete}
+                  paused={showUnlock}
                   style={{ height: 180 }}
                 >
                   <Grid />
                   <LiveXAxis />
                   <LiveYAxis />
-                  <LiveLine
-                    dataKey="value"
-                    stroke="var(--primary)"
-                    strokeWidth={2}
-                  />
+                  <LiveLine dataKey="value" stroke="var(--primary)" strokeWidth={2} />
                 </LiveLineChart>
               </motion.div>
             )}
           </AnimatePresence>
 
-          {/* Redirect notice */}
+          {error && !showUnlock && (
+            <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-600">
+              <p className="font-medium">Pipeline error</p>
+              <p className="mt-1 text-xs">{error}</p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                onClick={() => router.push("/dashboard")}
+              >
+                Return to dashboard
+              </Button>
+            </div>
+          )}
+
           <AnimatePresence>
-            {isComplete && (
+            {showUnlock && (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -349,8 +367,4 @@ function AnalyzePageInner() {
       </div>
     </div>
   );
-}
-
-function delay(ms: number) {
-  return new Promise<void>((res) => setTimeout(res, ms));
 }

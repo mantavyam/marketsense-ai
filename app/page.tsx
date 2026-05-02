@@ -89,7 +89,7 @@ export default function HeroPage() {
         >
           Understand how the world
           <br />
-          <span className="bg-linear-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+          <span className="bg-linear-to-r from-primary to-primary/60 bg-clip-text text-black">
             talks about your brand
           </span>
         </motion.h1>
@@ -118,7 +118,7 @@ export default function HeroPage() {
             </Link>
           </Button>
           <Button size="lg" variant="outline" className="px-8" asChild>
-            <Link href="/report/run-001">View sample report</Link>
+            <Link href="/dashboard">Go to dashboard</Link>
           </Button>
         </motion.div>
       </section>
