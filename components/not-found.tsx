@@ -23,11 +23,8 @@ export function NotFoundPage() {
 				</EmptyHeader>
 				<EmptyContent>
 					<div className="flex gap-2">
-						<Button render={<a href="#" />} nativeButton={false}><HomeIcon data-icon="inline-start" />Go Home
-                        							</Button>
-
-						<Button variant="outline" render={<a href="#" />} nativeButton={false}><CompassIcon data-icon="inline-start" />{" "}Explore
-                        							</Button>
+						<Button asChild><a href="/dashboard"><HomeIcon data-icon="inline-start" />Go Home</a></Button>
+						<Button variant="outline" asChild><a href="/"><CompassIcon data-icon="inline-start" />Explore</a></Button>
 					</div>
 				</EmptyContent>
 			</Empty>

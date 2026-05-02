@@ -1,5 +1,9 @@
-import AccountBasicInfo01 from "@/components/creative-tim/blocks/account-basic-info-01"
+import { GlassProfileSettingsCard } from "@/components/uitripled/profile-settings";
 
 export default function Page() {
-  return <AccountBasicInfo01 />
+  return (
+    <div className="flex min-h-screen items-center justify-center p-8">
+      <GlassProfileSettingsCard />
+    </div>
+  );
 }

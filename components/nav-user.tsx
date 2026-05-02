@@ -17,17 +17,17 @@ import {
 import { UserIcon, BellIcon, CommandIcon, LifeBuoyIcon, GraduationCapIcon, CreditCardIcon, LogOutIcon } from "lucide-react";
 
 const user = {
-	name: "Shaban Haider",
-	email: "shaban@efferd.com",
-	avatar: "https://github.com/shabanhr.png",
+	name: "Shivam Singh",
+	email: "studio@mantavyam.com",
+	avatar: "https://github.com/mantavyam.png",
 };
 
 export function NavUser() {
 	return (
 		<DropdownMenu>
-			<DropdownMenuTrigger render={<Avatar className="size-8" />}><AvatarImage src={user.avatar} /><AvatarFallback>{user.name.charAt(0)}</AvatarFallback></DropdownMenuTrigger>
+			<DropdownMenuTrigger nativeButton={false} render={<Avatar className="size-8" />}><AvatarImage src={user.avatar} /><AvatarFallback>{user.name.charAt(0)}</AvatarFallback></DropdownMenuTrigger>
 			<DropdownMenuContent align="end" className="w-60">
-				<DropdownMenuItem className="flex items-center justify-start gap-2">
+				<DropdownMenuGroup>
 					<DropdownMenuLabel className="flex items-center gap-3">
 						<Avatar className="size-10">
 							<AvatarImage src={user.avatar} />
@@ -41,7 +41,7 @@ export function NavUser() {
 							</div>
 						</div>
 					</DropdownMenuLabel>
-				</DropdownMenuItem>
+				</DropdownMenuGroup>
 				<DropdownMenuSeparator />
 				<DropdownMenuGroup>
 					<DropdownMenuItem>

@@ -15,7 +15,7 @@ import { ChevronLeftIcon, AtSignIcon } from "lucide-react";
 export function AuthPage() {
 	return (
 		<main className="relative md:h-screen md:overflow-hidden lg:grid lg:grid-cols-2">
-			<div className="relative hidden h-full flex-col border-r bg-secondary p-10 lg:flex dark:bg-secondary/20">
+			<div className="relative hidden h-full flex-col border-r bg-secondary p-10 lg:flex">
 				<div className="absolute inset-0 bg-linear-to-b from-transparent via-transparent to-background" />
 				<Logo className="mr-auto h-4.5" />
 
@@ -45,8 +45,9 @@ export function AuthPage() {
 					<div className="absolute top-0 right-0 h-320 w-60 rounded-full bg-[radial-gradient(50%_50%_at_50%_50%,--theme(--color-foreground/.04)_0,--theme(--color-foreground/.01)_80%,transparent_100%)] [translate:5%_-50%]" />
 					<div className="absolute top-0 right-0 h-320 w-60 -translate-y-87.5 rounded-full bg-[radial-gradient(50%_50%_at_50%_50%,--theme(--color-foreground/.04)_0,--theme(--color-foreground/.01)_80%,transparent_100%)]" />
 				</div>
-				<Button className="absolute top-7 left-5" variant="ghost" render={<a href="#" />} nativeButton={false}><ChevronLeftIcon data-icon="inline-start" />Home
-                					</Button>
+				<Button className="absolute top-7 left-5" variant="ghost" asChild>
+					<a href="/"><ChevronLeftIcon className="size-4" />Home</a>
+				</Button>
 
 				<div className="mx-auto space-y-4 sm:w-sm">
 					<Logo className="h-4.5 lg:hidden" />

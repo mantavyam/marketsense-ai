@@ -1,36 +1,29 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MarketSense-AI
+- MarketSense is a full-stack AI-powered web application that enables users to perform deep sentiment analysis on news coverage for any brand. The user enters a brand name and a time range, and the system autonomously discovers the best available free news source, extracts relevant headlines, processes them through a pre-trained transformer sentiment model (FinBERT), generates a structured visual report backed by 11 chart types, and optionally delivers the report via email. A floating chatbot panel allows real-time conversational interaction grounded strictly in the generated sentiment report.
 
-## Getting Started
+## Table of Contents (PRD.md)
 
-First, run the development server:
-
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. [Product Overview](#1-product-overview)
+2. [Goals and Success Metrics](#2-goals-and-success-metrics)
+3. [Tech Stack](#3-tech-stack)
+4. [Infrastructure Decision and Rationale](#4-infrastructure-decision-and-rationale)
+5. [System Architecture](#5-system-architecture)
+6. [Authentication and User Management](#6-authentication-and-user-management)
+7. [Phase 1 — User Input and Configuration](#7-phase-1--user-input-and-configuration)
+8. [Phase 2 — News Source Identification and Data Extraction](#8-phase-2--news-source-identification-and-data-extraction)
+9. [Phase 3 — Data Processing and Preparation](#9-phase-3--data-processing-and-preparation)
+10. [Phase 4 — Sentiment Analysis Execution](#10-phase-4--sentiment-analysis-execution)
+11. [Phase 5 — Report Generation](#11-phase-5--report-generation)
+12. [Phase 6 — Report Delivery](#12-phase-6--report-delivery)
+13. [Phase 7 — Interactive Chatbot](#13-phase-7--interactive-chatbot)
+14. [Frontend — Pages and UI Specification](#14-frontend--pages-and-ui-specification)
+15. [Visualisation Layer — Chart Mapping](#15-visualisation-layer--chart-mapping)
+16. [Real-Time Processing Feedback UI](#16-real-time-processing-feedback-ui)
+17. [PDF Report Customisation](#17-pdf-report-customisation)
+18. [Database Schema](#18-database-schema)
+19. [API Specification](#19-api-specification)
+20. [Environment Variables](#20-environment-variables)
+21. [Error States and Edge Cases](#21-error-states-and-edge-cases)
+22. [Rate Limiting and Concurrency](#22-rate-limiting-and-concurrency)
+23. [Future Scope](#23-future-scope)
+24. [Out of Scope for v1.0](#24-out-of-scope-for-v10)

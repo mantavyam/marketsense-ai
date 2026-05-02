@@ -111,18 +111,18 @@ const SAMPLE_LOGS: Log[] = [
 ];
 
 const levelStyles: Record<LogLevel, string> = {
-  info: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
-  warning: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400",
-  error: "bg-red-500/10 text-red-600 dark:text-red-400",
+  info: "bg-blue-500/10 text-blue-600",
+  warning: "bg-yellow-500/10 text-yellow-600",
+  error: "bg-red-500/10 text-red-600",
 };
 
 const statusStyles: Record<string, string> = {
-  "200": "text-green-600 dark:text-green-400",
-  "201": "text-green-600 dark:text-green-400",
-  "429": "text-yellow-600 dark:text-yellow-400",
-  "502": "text-red-600 dark:text-red-400",
-  "503": "text-red-600 dark:text-red-400",
-  warning: "text-yellow-600 dark:text-yellow-400",
+  "200": "text-green-600",
+  "201": "text-green-600",
+  "429": "text-yellow-600",
+  "502": "text-red-600",
+  "503": "text-red-600",
+  warning: "text-yellow-600",
 };
 
 function LogRow({
